@@ -86,7 +86,12 @@ else:
         st.success(f"Invoice saved! Total: ${total_amount}")
 
         # WhatsApp link
-        message = f"Hello {customer_name}, thank you for buying from The Artsy Retreat! Your invoice:\n" + "\n".join(invoice_lines) + f"\nTotal: ${total_amount}\nWe also conduct workshops!"
+        message = f"🎨 Hello {customer_name}! Thank you for shopping with *The Artsy Retreat*.\n\n"
+                f"🧾 Your Invoice:\n"
+                + "\n".join([f"• {line}" for line in invoice_lines])
+                + f"\n\n💰 *Total:* ${total_amount}\n"
+                "✨ We also conduct fun workshops for kids and adults!\n"
+                "📅 Book your next workshop now and unleash your creativity! 🎨🖌️"
         encoded_msg = urllib.parse.quote(message)
         wa_link = f"https://wa.me/{customer_mobile}?text={encoded_msg}"
 
@@ -97,3 +102,4 @@ st.header("📦 Current Products & Stock")
 # Reload products from sheet to show live updated stock
 products_df = pd.DataFrame(products_sheet.get_all_records())
 st.dataframe(products_df)
+
