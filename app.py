@@ -1,46 +1,58 @@
-
 import streamlit as st
 import pandas as pd
 import urllib.parse
-from pathlib import Path
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
 
-# File paths
-products_file = Path("products.xlsx")
-customers_file = Path("customers.xlsx")
+# --- Custom Background & Styles ---
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background: linear-gradient(135deg, #FFDEE9 0%, #B5FFFC 100%);
+        background-attachment: fixed;
+    }
+    .stApp h1, .stApp h2, .stApp h3 {
+        font-family: 'Comic Sans MS', cursive, sans-serif;
+        color: #333333;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# Load or initialize products
-if products_file.exists():
-    products_df = pd.read_excel(products_file)
-else:
-    products_df = pd.DataFrame(columns=["Product", "Price", "Stock"])
+# Optional header image
+st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1f/Paint_brush_icon.svg/1200px-Paint_brush_icon.svg.png", width=80)
+st.title("🎨 The Artsy Retreat - Invoice & Stock Manager")
 
-st.title("The Artsy Retreat - Invoice & Stock Manager")
+# --- Google Sheets Setup ---
+SHEET_NAME = "Artsy Retreat Data"
+SERVICE_ACCOUNT_FILE = "service_account.json"
 
-# ---- Admin Section ----
-st.header("Admin: Add/Edit Products")
-with st.form("product_form"):
-    new_product = st.text_input("Product Name")
-    new_price = st.number_input("Price", min_value=0.0)
-    new_stock = st.number_input("Stock Quantity", min_value=0)
-    submitted = st.form_submit_button("Add/Update Product")
-    if submitted and new_product:
-        if new_product in products_df["Product"].values:
-            # Update existing product
-            products_df.loc[products_df["Product"] == new_product, ["Price", "Stock"]] = [new_price, new_stock]
-        else:
-            products_df = pd.concat([products_df, pd.DataFrame([[new_product, new_price, new_stock]], columns=["Product", "Price", "Stock"])])
-        products_df.to_excel(products_file, index=False)
-        st.success(f"Product {new_product} added/updated successfully!")
+scope = ["https://spreadsheets.google.com/feeds",
+         "https://www.googleapis.com/auth/spreadsheets",
+         "https://www.googleapis.com/auth/drive.file",
+         "https://www.googleapis.com/auth/drive"]
 
-st.dataframe(products_df)
+creds = ServiceAccountCredentials.from_json_keyfile_name(SERVICE_ACCOUNT_FILE, scope)
+client = gspread.authorize(creds)
 
-# ---- Customer Invoice Section ----
-st.header("Create Customer Invoice")
+# Open sheets
+products_sheet = client.open(SHEET_NAME).worksheet("Products")
+try:
+    invoices_sheet = client.open(SHEET_NAME).worksheet("Invoices")
+except gspread.exceptions.WorksheetNotFound:
+    invoices_sheet = client.open(SHEET_NAME).add_worksheet(title="Invoices", rows=100, cols=10)
+
+# Load products into DataFrame
+products_df = pd.DataFrame(products_sheet.get_all_records())
+
+# --- INVOICE SECTION ---
+st.header("🧾 Create Customer Invoice")
 
 customer_name = st.text_input("Customer Name")
 customer_mobile = st.text_input("Mobile Number (with country code, e.g., 919876543210)")
 
-# Filter products with stock > 0
 available_products = products_df[products_df["Stock"] > 0]
 
 if available_products.empty:
@@ -63,24 +75,25 @@ else:
     if st.button("Generate Invoice & WhatsApp Link") and customer_name and customer_mobile and selected_products:
         # Update stock
         for prod, qty in quantities.items():
-            products_df.loc[products_df["Product"] == prod, "Stock"] -= qty
-        products_df.to_excel(products_file, index=False)
+            row_idx = products_df.index[products_df["Product"] == prod][0] + 2  # +2 for header
+            new_stock = products_df.loc[products_df["Product"] == prod, "Stock"].values[0] - qty
+            products_sheet.update_cell(row_idx, 3, new_stock)  # column 3 = Stock
 
-        # Save customer invoice
-        if customers_file.exists():
-            customers_df = pd.read_excel(customers_file)
-        else:
-            customers_df = pd.DataFrame(columns=["Name", "Mobile", "Products", "Total"])
-        customers_df = pd.concat([customers_df, pd.DataFrame([[customer_name, customer_mobile, ", ".join(invoice_lines), total_amount]], columns=customers_df.columns)])
-        customers_df.to_excel(customers_file, index=False)
+        # Save invoice
+        invoice_row = [customer_name, customer_mobile, ", ".join(invoice_lines), total_amount]
+        invoices_sheet.append_row(invoice_row)
 
         st.success(f"Invoice saved! Total: ${total_amount}")
 
         # WhatsApp link
-        message = f"Hello {customer_name}, thank you for buying from The Artsy Retreat! Your invoice:\n" + "\n".join(invoice_lines) + f"\nTotal: ${total_amount}\n. We are happy to inform you that we do conduct workshops. If interested please ping us back!"
+        message = f"Hello {customer_name}, thank you for buying from The Artsy Retreat! Your invoice:\n" + "\n".join(invoice_lines) + f"\nTotal: ${total_amount}\nWe also conduct workshops!"
         encoded_msg = urllib.parse.quote(message)
         wa_link = f"https://wa.me/{customer_mobile}?text={encoded_msg}"
-        
+
         st.markdown(f"[Send Invoice on WhatsApp]({wa_link})", unsafe_allow_html=True)
 
-    
+# --- STOCK SECTION ---
+st.header("📦 Current Products & Stock")
+# Reload products from sheet to show live updated stock
+products_df = pd.DataFrame(products_sheet.get_all_records())
+st.dataframe(products_df)
