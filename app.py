@@ -87,7 +87,7 @@ else:
 
         # WhatsApp link
         message = f"🎨 Hello {customer_name}! Thank you for shopping with *The Artsy Retreat*.\n\n"
-                f"🧾 Your Invoice:\n"
+                 +f"🧾 Your Invoice:\n"
                 + "\n".join([f"• {line}" for line in invoice_lines])
                 + f"\n\n💰 *Total:* ${total_amount}\n"
                 "✨ We also conduct fun workshops for kids and adults!\n"
@@ -102,4 +102,5 @@ st.header("📦 Current Products & Stock")
 # Reload products from sheet to show live updated stock
 products_df = pd.DataFrame(products_sheet.get_all_records())
 st.dataframe(products_df)
+
 
